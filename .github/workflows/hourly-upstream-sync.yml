@@ -1,0 +1,23 @@
+name: Hourly Upstream Sync
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout destination repository
+        uses: actions/checkout@v4
+
+      - name: Sync upstream changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Syncs the master branch specifically
+          gh repo sync ${{ github.repository }} --branch master
