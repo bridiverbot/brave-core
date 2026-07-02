@@ -176,20 +176,18 @@ bool BraveContentSettingsAgentImpl::AllowScript(bool enabled_per_settings) {
   blocked_script_url_ = GURL::EmptyGURL();
 
   blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
-  const GURL primary_url(GetTopFrameOriginAsURL(frame));
   const GURL secondary_url(url::Origin(frame->GetSecurityOrigin()).GetURL());
+  // The effective JAVASCRIPT content setting already incorporates the site's
+  // Brave Shields state, so there is no need to check whether Shields are down
+  // separately here.
   bool allow = ContentSettingsAgentImpl::AllowScript(enabled_per_settings);
-  auto is_shields_down = IsBraveShieldsDown(primary_url, secondary_url);
   auto is_script_temporarily_allowed =
       IsScriptTemporarilyAllowed(secondary_url);
-  allow = !IsJsBlockingEnforced() &&
-          (allow || is_shields_down || is_script_temporarily_allowed);
+  allow = !IsJsBlockingEnforced() && (allow || is_script_temporarily_allowed);
   if (!allow) {
     blocked_script_url_ = secondary_url;
-  } else if (!is_shields_down) {
-    if (is_script_temporarily_allowed) {
-      BraveSpecificDidAllowJavaScriptOnce(secondary_url);
-    }
+  } else if (is_script_temporarily_allowed) {
+    BraveSpecificDidAllowJavaScriptOnce(secondary_url);
   }
 
   return allow;
@@ -211,7 +209,6 @@ void BraveContentSettingsAgentImpl::DidNotAllowScript() {
 bool BraveContentSettingsAgentImpl::AllowScriptFromSource(
     bool enabled_per_settings,
     const blink::WebURL& script_url) {
-  const GURL primary_url(GetTopFrameOriginAsURL(render_frame()->GetWebFrame()));
   GURL secondary_url(script_url);
   // For scripts w/o sources it should report the domain / site used for
   // executing the frame (which most, but not all, of the time will just be from
@@ -221,21 +218,20 @@ bool BraveContentSettingsAgentImpl::AllowScriptFromSource(
         url::Origin(render_frame()->GetWebFrame()->GetSecurityOrigin())
             .GetURL();
   }
+  // The effective JAVASCRIPT content setting already incorporates the site's
+  // Brave Shields state, so there is no need to check whether Shields are down
+  // separately here.
   bool allow = ContentSettingsAgentImpl::AllowScriptFromSource(
       enabled_per_settings, script_url);
 
-  auto is_shields_down = IsBraveShieldsDown(primary_url, secondary_url);
   auto is_script_temporarily_allowed =
       IsScriptTemporarilyAllowed(secondary_url);
-  allow = !IsJsBlockingEnforced() &&
-          (allow || is_shields_down || is_script_temporarily_allowed);
+  allow = !IsJsBlockingEnforced() && (allow || is_script_temporarily_allowed);
 
   if (!allow) {
     blocked_script_url_ = secondary_url;
-  } else if (!is_shields_down) {
-    if (is_script_temporarily_allowed) {
-      BraveSpecificDidAllowJavaScriptOnce(secondary_url);
-    }
+  } else if (is_script_temporarily_allowed) {
+    BraveSpecificDidAllowJavaScriptOnce(secondary_url);
   }
 
   return allow;
