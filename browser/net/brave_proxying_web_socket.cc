@@ -222,12 +222,35 @@ void BraveProxyingWebSocket<T>::OnConnectionEstablished(
     mojo::ScopedDataPipeProducerHandle writable) {
   DCHECK(forwarding_handshake_client_);
   DCHECK(!is_done_);
-  remote_endpoint_ = response->remote_endpoint;
-  forwarding_handshake_client_->OnConnectionEstablished(
-      std::move(websocket), std::move(client_receiver), std::move(response),
-      std::move(readable), std::move(writable));
+  websocket_ = std::move(websocket);
+  client_receiver_ = std::move(client_receiver);
+  handshake_response_ = std::move(response);
+  readable_ = std::move(readable);
+  writable_ = std::move(writable);
 
-  OnError(net::ERR_FAILED);
+  remote_endpoint_ = handshake_response_->remote_endpoint;
+  response_.remote_endpoint = remote_endpoint_;
+
+  // If the network service supplied a TrustedHeaderClient, response header
+  // processing happened through OnHeadersReceived() already. Otherwise,
+  // reconstruct the handshake response headers here so Brave's
+  // OnHeadersReceived callbacks still run before establishment is forwarded.
+  if (proxy_has_extra_headers()) {
+    ContinueToCompleted();
+    return;
+  }
+
+  response_.headers =
+      base::MakeRefCounted<net::HttpResponseHeaders>(base::StringPrintf(
+          "HTTP/%d.%d %d %s", handshake_response_->http_version.major_value(),
+          handshake_response_->http_version.minor_value(),
+          handshake_response_->status_code,
+          handshake_response_->status_text.c_str()));
+  for (const auto& header : handshake_response_->headers) {
+    response_.headers->AddHeader(header->name, header->value);
+  }
+
+  ContinueToHeadersReceived();
 }
 
 template <template <typename> class T>
@@ -236,6 +259,10 @@ void BraveProxyingWebSocket<T>::OnAuthRequired(
     const scoped_refptr<net::HttpResponseHeaders>& headers,
     const net::IPEndPoint& remote_endpoint,
     OnAuthRequiredCallback callback) {
+  if (!proxy_auth_handler_.is_bound()) {
+    std::move(callback).Run(std::nullopt);
+    return;
+  }
   proxy_auth_handler_->OnAuthRequired(auth_info, headers, remote_endpoint,
                                       std::move(callback));
 }
@@ -261,6 +288,9 @@ void BraveProxyingWebSocket<T>::OnHeadersReceived(
   DCHECK(proxy_has_extra_headers());
 
   on_headers_received_callback_ = std::move(callback);
+  remote_endpoint_ = remote_endpoint;
+  ssl_info_ = ssl_info;
+  response_.remote_endpoint = remote_endpoint;
   response_.headers = base::MakeRefCounted<net::HttpResponseHeaders>(headers);
 
   ContinueToHeadersReceived();
@@ -392,16 +422,23 @@ void BraveProxyingWebSocket<T>::OnHeadersReceivedCompleteFromProxy(
     const std::optional<std::string>& headers,
     const std::optional<GURL>& url) {
   if (on_headers_received_callback_) {
-    std::move(on_headers_received_callback_)
-        .Run(net::OK, headers, std::nullopt);
+    std::move(on_headers_received_callback_).Run(error_code, headers, url);
+  }
+
+  if (error_code != net::OK) {
+    OnError(error_code);
+    return;
   }
 
   if (override_headers_) {
     response_.headers = override_headers_;
     override_headers_ = nullptr;
+  } else if (headers) {
+    response_.headers = base::MakeRefCounted<net::HttpResponseHeaders>(*headers);
   }
 
   ResumeIncomingMethodCallProcessing();
+  ContinueToCompleted();
 }
 
 template <template <typename> class T>
@@ -411,26 +448,39 @@ void BraveProxyingWebSocket<T>::OnHeadersReceivedComplete(int error_code) {
     return;
   }
 
-  std::string headers;
+  std::optional<std::string> headers;
   if (override_headers_) {
     headers = override_headers_->raw_headers();
   }
 
   if (proxy_has_extra_headers()) {
     proxy_trusted_header_client_->OnHeadersReceived(
-        headers, remote_endpoint_, /*ssl_info=*/std::nullopt,
+        headers.value_or(response_.headers ? response_.headers->raw_headers()
+                                           : std::string()),
+        remote_endpoint_, ssl_info_,
         base::BindOnce(
             &BraveProxyingWebSocket::OnHeadersReceivedCompleteFromProxy,
             weak_factory_.GetWeakPtr()));
   } else {
-    OnHeadersReceivedCompleteFromProxy(
-        error_code, std::optional<std::string>(headers), std::nullopt);
+    OnHeadersReceivedCompleteFromProxy(error_code, headers, std::nullopt);
   }
+}
+
+template <template <typename> class T>
+void BraveProxyingWebSocket<T>::ContinueToCompleted() {
+  DCHECK(forwarding_handshake_client_);
+  DCHECK(handshake_response_);
+  forwarding_handshake_client_->OnConnectionEstablished(
+      std::move(websocket_), std::move(client_receiver_),
+      std::move(handshake_response_), std::move(readable_), std::move(writable_));
+
+  OnError(net::ERR_FAILED);
 }
 
 template <template <typename> class T>
 void BraveProxyingWebSocket<T>::PauseIncomingMethodCallProcessing() {
   receiver_as_handshake_client_.Pause();
+  receiver_as_auth_handler_.Pause();
   if (proxy_has_extra_headers()) {
     receiver_as_header_client_.Pause();
   }
@@ -439,6 +489,7 @@ void BraveProxyingWebSocket<T>::PauseIncomingMethodCallProcessing() {
 template <template <typename> class T>
 void BraveProxyingWebSocket<T>::ResumeIncomingMethodCallProcessing() {
   receiver_as_handshake_client_.Resume();
+  receiver_as_auth_handler_.Resume();
   if (proxy_has_extra_headers()) {
     receiver_as_header_client_.Resume();
   }
