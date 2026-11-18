@@ -45,7 +45,8 @@ mojom::ContentSettingSource ConvertSettingsSource(
 // Returns the origin to treat as first party when applying Shields rules to a
 // request. Main frames use the request URL's origin, unless it is opaque.
 // Subframes, subresources and main frames with an opaque request URL origin
-// use the request initiator when there is one.
+// use the request initiator when there is one. Shields ignores sandboxing, so
+// an opaque result is replaced by its precursor origin when it has one.
 url::Origin GetFirstPartyOriginForShields(
     const GURL& request_url,
     base::optional_ref<const url::Origin> request_initiator,

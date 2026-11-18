@@ -2175,6 +2175,135 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleAboutBlankPopup) {
   }
 }
 
+// Shields ignores sandboxing: frames loaded by a sandboxed document use the
+// origin the sandboxed document's opaque origin was derived from as first
+// party.
+IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
+  // Applied to third-party only.
+  UpdateAdBlockInstanceWithRules(
+      "||example.com^$third-party,csp=script-src 'nonce-abcdef' "
+      "'unsafe-eval' 'self'");
+
+  auto add_frame = [](const content::ToRenderFrameHost& parent,
+                      const GURL& url) {
+    ASSERT_TRUE(ExecJs(parent, content::JsReplace(R"(
+      new Promise(resolve => {
+        const frame = document.createElement('iframe');
+        frame.onload = () => resolve(true);
+        frame.src = $1;
+        document.body.appendChild(frame);
+      }))",
+                                                  url)));
+  };
+
+  auto add_sandboxed_frame = [](const content::ToRenderFrameHost& parent,
+                                const std::string& src) {
+    ASSERT_TRUE(ExecJs(parent, content::JsReplace(R"(
+      new Promise(resolve => {
+        const frame = document.createElement('iframe');
+        frame.sandbox = 'allow-scripts';
+        frame.onload = () => resolve(true);
+        frame.src = $1;
+        document.body.appendChild(frame);
+      }))",
+                                                  src)));
+  };
+
+  const GURL url =
+      embedded_test_server()->GetURL("example.com", "/csp_rules.html");
+
+  {
+    // example.com document served with `Content-Security-Policy: sandbox`.
+    // Its subframe on example.com is first-party, so the rule does not match.
+    NavigateToURL(embedded_test_server()->GetURL(
+        "example.com", "/csp_sandboxed_main_frame.html"));
+    content::RenderFrameHost* main_frame =
+        web_contents()->GetPrimaryMainFrame();
+    ASSERT_TRUE(main_frame->GetLastCommittedOrigin().opaque());
+
+    add_frame(main_frame, url);
+    content::RenderFrameHost* frame = content::ChildFrameAt(main_frame, 0);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedNonceScript"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedUnsafeInlineScript"));
+  }
+
+  {
+    // a.com document served with `Content-Security-Policy: sandbox`. Its
+    // subframe on example.com is third-party, so the rule matches.
+    NavigateToURL(embedded_test_server()->GetURL(
+        "a.com", "/csp_sandboxed_main_frame.html"));
+    content::RenderFrameHost* main_frame =
+        web_contents()->GetPrimaryMainFrame();
+    ASSERT_TRUE(main_frame->GetLastCommittedOrigin().opaque());
+
+    add_frame(main_frame, url);
+    content::RenderFrameHost* frame = content::ChildFrameAt(main_frame, 0);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedNonceScript"));
+    EXPECT_EQ(false, EvalJs(frame, "!!window.loadedUnsafeInlineScript"));
+  }
+
+  {
+    // Sandboxed about:blank iframe on example.com. It inherits an opaque
+    // origin derived from example.com, so its example.com subframe is
+    // first-party and the rule does not match.
+    NavigateToURL(
+        embedded_test_server()->GetURL("example.com", "/simple.html"));
+    add_sandboxed_frame(web_contents(), "about:blank");
+    content::RenderFrameHost* sandboxed_frame =
+        content::ChildFrameAt(web_contents(), 0);
+    ASSERT_TRUE(sandboxed_frame);
+    ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
+
+    add_frame(sandboxed_frame, url);
+    content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedNonceScript"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedUnsafeInlineScript"));
+  }
+
+  {
+    // Sandboxed about:blank iframe on a.com. Its example.com subframe is
+    // third-party, so the rule matches.
+    NavigateToURL(embedded_test_server()->GetURL("a.com", "/simple.html"));
+    add_sandboxed_frame(web_contents(), "about:blank");
+    content::RenderFrameHost* sandboxed_frame =
+        content::ChildFrameAt(web_contents(), 0);
+    ASSERT_TRUE(sandboxed_frame);
+    ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
+
+    add_frame(sandboxed_frame, url);
+    content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedNonceScript"));
+    EXPECT_EQ(false, EvalJs(frame, "!!window.loadedUnsafeInlineScript"));
+  }
+
+  {
+    // Sandboxed iframe loading a document from example.com, embedded in
+    // example.com. Its own subframe on example.com is first-party.
+    NavigateToURL(
+        embedded_test_server()->GetURL("example.com", "/simple.html"));
+    add_sandboxed_frame(web_contents(), "/simple.html");
+    content::RenderFrameHost* sandboxed_frame =
+        content::ChildFrameAt(web_contents(), 0);
+    ASSERT_TRUE(sandboxed_frame);
+    ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
+
+    add_frame(sandboxed_frame, url);
+    content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
+    ASSERT_TRUE(frame);
+    ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedNonceScript"));
+    EXPECT_EQ(true, EvalJs(frame, "!!window.loadedUnsafeInlineScript"));
+  }
+}
+
 // Verify that Content Security Policies from multiple `$csp` rules are
 // combined.
 //

@@ -58,4 +58,43 @@ TEST(BraveShieldUtilsTest, GetFirstPartyOriginForShieldsNotMainFrame) {
                                                      /*is_main_frame=*/false));
 }
 
+// Sandboxed documents have an opaque origin, but Shields uses the origin it
+// was derived from.
+TEST(BraveShieldUtilsTest, GetFirstPartyOriginForShieldsSandboxedInitiator) {
+  const url::Origin a_com = url::Origin::Create(GURL("https://a.com"));
+  const url::Origin sandboxed = a_com.DeriveNewOpaqueOrigin();
+  ASSERT_TRUE(sandboxed.opaque());
+
+  EXPECT_EQ(a_com, GetFirstPartyOriginForShields(GURL("https://b.com/frame"),
+                                                 sandboxed,
+                                                 /*is_main_frame=*/false));
+  EXPECT_EQ(a_com, GetFirstPartyOriginForShields(
+                       GURL("https://a.com/script.js"), sandboxed,
+                       /*is_main_frame=*/false));
+
+  // A main frame with an opaque request URL origin also uses the initiator's
+  // precursor.
+  EXPECT_EQ(a_com, GetFirstPartyOriginForShields(GURL("data:text/html,hello"),
+                                                 sandboxed,
+                                                 /*is_main_frame=*/true));
+
+  // A main frame with a regular request URL still ignores the initiator.
+  EXPECT_EQ(url::Origin::Create(GURL("https://b.com")),
+            GetFirstPartyOriginForShields(GURL("https://b.com/page"), sandboxed,
+                                          /*is_main_frame=*/true));
+}
+
+TEST(BraveShieldUtilsTest,
+     GetFirstPartyOriginForShieldsOpaqueWithoutPrecursor) {
+  // An opaque origin without a precursor stays opaque.
+  EXPECT_TRUE(GetFirstPartyOriginForShields(GURL("https://a.com/frame"),
+                                            url::Origin(),
+                                            /*is_main_frame=*/false)
+                  .opaque());
+  EXPECT_TRUE(GetFirstPartyOriginForShields(GURL("data:text/html,hello"),
+                                            std::nullopt,
+                                            /*is_main_frame=*/true)
+                  .opaque());
+}
+
 }  // namespace brave_shields

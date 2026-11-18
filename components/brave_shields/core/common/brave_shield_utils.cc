@@ -130,6 +130,20 @@ mojom::ContentSettingSource ConvertSettingsSource(
   NOTREACHED();
 }
 
+namespace {
+
+// Shields ignores sandboxing, so an opaque origin is replaced by the origin it
+// was derived from, when there is one.
+url::Origin GetPrecursorOriginIfOpaque(const url::Origin& origin) {
+  if (!origin.opaque()) {
+    return origin;
+  }
+  const GURL precursor_url = origin.GetTupleOrPrecursorTupleIfOpaque().GetURL();
+  return precursor_url.is_valid() ? url::Origin::Create(precursor_url) : origin;
+}
+
+}  // namespace
+
 url::Origin GetFirstPartyOriginForShields(
     const GURL& request_url,
     base::optional_ref<const url::Origin> request_initiator,
@@ -137,7 +151,8 @@ url::Origin GetFirstPartyOriginForShields(
   url::Origin request_origin = url::Origin::Create(request_url);
   const bool use_initiator_origin =
       request_initiator && (!is_main_frame || request_origin.opaque());
-  return use_initiator_origin ? *request_initiator : request_origin;
+  return GetPrecursorOriginIfOpaque(use_initiator_origin ? *request_initiator
+                                                         : request_origin);
 }
 
 }  // namespace brave_shields
