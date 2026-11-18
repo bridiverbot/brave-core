@@ -7,9 +7,11 @@
 #define BRAVE_COMPONENTS_BRAVE_SHIELDS_CORE_COMMON_BRAVE_SHIELD_UTILS_H_
 
 #include <map>
+#include <optional>
 
 #include "brave/components/brave_shields/core/common/shields_settings.mojom-data-view.h"
 #include "components/content_settings/core/common/content_settings.h"
+#include "url/origin.h"
 
 class GURL;
 
@@ -39,6 +41,15 @@ ShieldsSettingCounts GetSettingCountFromCosmeticFilteringRules(
 
 mojom::ContentSettingSource ConvertSettingsSource(
     const content_settings::SettingSource source);
+
+// Returns the origin to treat as first party when applying Shields rules to a
+// request. Main frames use the request URL's origin, unless it is opaque.
+// Subframes, subresources and main frames with an opaque request URL origin
+// use the request initiator when there is one.
+url::Origin GetFirstPartyOriginForShields(
+    const GURL& request_url,
+    const std::optional<url::Origin>& request_initiator,
+    bool is_main_frame);
 
 }  // namespace brave_shields
 

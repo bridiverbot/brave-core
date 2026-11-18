@@ -17,6 +17,7 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace brave_shields {
 
@@ -127,6 +128,16 @@ mojom::ContentSettingSource ConvertSettingsSource(
       return mojom::ContentSettingSource::kTest;
   }
   NOTREACHED();
+}
+
+url::Origin GetFirstPartyOriginForShields(
+    const GURL& request_url,
+    const std::optional<url::Origin>& request_initiator,
+    bool is_main_frame) {
+  url::Origin request_origin = url::Origin::Create(request_url);
+  const bool use_initiator_origin =
+      request_initiator && (!is_main_frame || request_origin.opaque());
+  return use_initiator_origin ? *request_initiator : request_origin;
 }
 
 }  // namespace brave_shields

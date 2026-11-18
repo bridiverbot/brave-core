@@ -215,30 +215,5 @@ TEST_F(BraveRequestInfoTest, FirstPartyOriginForShieldsSubFrameUsesInitiator) {
   EXPECT_EQ(initiator, ctx.first_party_origin_for_shields());
 }
 
-TEST_F(BraveRequestInfoTest, GetFirstPartyOriginForShieldsFromResourceRequest) {
-  const GURL url("https://example.com/page");
-  const url::Origin initiator =
-      url::Origin::Create(GURL("https://initiator.example"));
-  network::ResourceRequest request;
-  request.url = url;
-  request.request_initiator = initiator;
-
-  request.resource_type =
-      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
-  EXPECT_EQ(url::Origin::Create(url),
-            BraveRequestInfo::GetFirstPartyOriginForShields(request));
-
-  request.resource_type =
-      static_cast<int>(blink::mojom::ResourceType::kSubFrame);
-  EXPECT_EQ(initiator,
-            BraveRequestInfo::GetFirstPartyOriginForShields(request));
-
-  request.url = GURL("data:text/html,hello");
-  request.resource_type =
-      static_cast<int>(blink::mojom::ResourceType::kMainFrame);
-  EXPECT_EQ(initiator,
-            BraveRequestInfo::GetFirstPartyOriginForShields(request));
-}
-
 }  // namespace
 }  // namespace brave
