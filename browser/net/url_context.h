@@ -94,6 +94,9 @@ class BraveRequestInfo {
   // Subframes, subresources and main frames with an opaque request URL origin
   // use the request initiator when there is one.
   url::Origin first_party_origin_for_shields() const;
+  // Same as `first_party_origin_for_shields()`, computed from `context`.
+  static url::Origin GetFirstPartyOriginForShields(
+      const network::ResourceRequest& context);
 
   bool internal_redirect() const;
   void set_internal_redirect(bool value);

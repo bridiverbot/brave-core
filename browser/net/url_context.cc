@@ -68,6 +68,18 @@ std::string GetUploadData(const network::ResourceRequest& request) {
   return upload_data;
 }
 
+url::Origin FirstPartyOriginForShields(
+    const GURL& request_url,
+    const std::optional<url::Origin>& request_initiator,
+    blink::mojom::ResourceType resource_type) {
+  url::Origin request_origin = url::Origin::Create(request_url);
+  const bool use_initiator_origin =
+      request_initiator &&
+      (resource_type != blink::mojom::ResourceType::kMainFrame ||
+       request_origin.opaque());
+  return use_initiator_origin ? *request_initiator : request_origin;
+}
+
 }  // namespace
 
 BraveRequestInfo::BraveRequestInfo() {
@@ -136,12 +148,16 @@ void BraveRequestInfo::set_request_initiator(
 
 url::Origin BraveRequestInfo::first_party_origin_for_shields() const {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-  url::Origin request_origin = url::Origin::Create(request_url_);
-  const bool use_initiator_origin =
-      request_initiator_ &&
-      (resource_type_ != blink::mojom::ResourceType::kMainFrame ||
-       request_origin.opaque());
-  return use_initiator_origin ? *request_initiator_ : request_origin;
+  return FirstPartyOriginForShields(request_url_, request_initiator_,
+                                    resource_type_);
+}
+
+// static
+url::Origin BraveRequestInfo::GetFirstPartyOriginForShields(
+    const network::ResourceRequest& context) {
+  return FirstPartyOriginForShields(
+      context.url, context.request_initiator,
+      static_cast<blink::mojom::ResourceType>(context.resource_type));
 }
 
 bool BraveRequestInfo::internal_redirect() const {
