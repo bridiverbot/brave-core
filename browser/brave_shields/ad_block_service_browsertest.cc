@@ -138,6 +138,19 @@ void WaitForSelectorBlocked(const content::ToRenderFrameHost& target,
   ASSERT_TRUE(
       EvalJs(target, content::JsReplace(kTemplate, selector)).ExtractBool());
 }
+
+// Appends an iframe loading `url` to `parent` and waits for it to load.
+void AddFrame(const content::ToRenderFrameHost& parent, const GURL& url) {
+  ASSERT_TRUE(ExecJs(parent, content::JsReplace(R"(
+    new Promise(resolve => {
+      const frame = document.createElement('iframe');
+      frame.onload = () => resolve(true);
+      frame.src = $1;
+      document.body.appendChild(frame);
+    }))",
+                                                url)));
+}
+
 }  // namespace
 
 AdBlockServiceTest::AdBlockServiceTest()
@@ -2184,18 +2197,6 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
       "||example.com^$third-party,csp=script-src 'nonce-abcdef' "
       "'unsafe-eval' 'self'");
 
-  auto add_frame = [](const content::ToRenderFrameHost& parent,
-                      const GURL& url) {
-    ASSERT_TRUE(ExecJs(parent, content::JsReplace(R"(
-      new Promise(resolve => {
-        const frame = document.createElement('iframe');
-        frame.onload = () => resolve(true);
-        frame.src = $1;
-        document.body.appendChild(frame);
-      }))",
-                                                  url)));
-  };
-
   auto add_sandboxed_frame = [](const content::ToRenderFrameHost& parent,
                                 const std::string& src) {
     ASSERT_TRUE(ExecJs(parent, content::JsReplace(R"(
@@ -2221,7 +2222,7 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
         web_contents()->GetPrimaryMainFrame();
     ASSERT_TRUE(main_frame->GetLastCommittedOrigin().opaque());
 
-    add_frame(main_frame, url);
+    ASSERT_NO_FATAL_FAILURE(AddFrame(main_frame, url));
     content::RenderFrameHost* frame = content::ChildFrameAt(main_frame, 0);
     ASSERT_TRUE(frame);
     ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
@@ -2238,7 +2239,7 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
         web_contents()->GetPrimaryMainFrame();
     ASSERT_TRUE(main_frame->GetLastCommittedOrigin().opaque());
 
-    add_frame(main_frame, url);
+    ASSERT_NO_FATAL_FAILURE(AddFrame(main_frame, url));
     content::RenderFrameHost* frame = content::ChildFrameAt(main_frame, 0);
     ASSERT_TRUE(frame);
     ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
@@ -2258,7 +2259,7 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
     ASSERT_TRUE(sandboxed_frame);
     ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
 
-    add_frame(sandboxed_frame, url);
+    ASSERT_NO_FATAL_FAILURE(AddFrame(sandboxed_frame, url));
     content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
     ASSERT_TRUE(frame);
     ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
@@ -2276,7 +2277,7 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
     ASSERT_TRUE(sandboxed_frame);
     ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
 
-    add_frame(sandboxed_frame, url);
+    ASSERT_NO_FATAL_FAILURE(AddFrame(sandboxed_frame, url));
     content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
     ASSERT_TRUE(frame);
     ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
@@ -2295,7 +2296,7 @@ IN_PROC_BROWSER_TEST_F(AdBlockServiceTest, CspRuleSandboxedInitiator) {
     ASSERT_TRUE(sandboxed_frame);
     ASSERT_TRUE(sandboxed_frame->GetLastCommittedOrigin().opaque());
 
-    add_frame(sandboxed_frame, url);
+    ASSERT_NO_FATAL_FAILURE(AddFrame(sandboxed_frame, url));
     content::RenderFrameHost* frame = content::ChildFrameAt(sandboxed_frame, 0);
     ASSERT_TRUE(frame);
     ASSERT_TRUE(ExecJs(frame, "window.allLoaded"));
