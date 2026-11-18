@@ -7,8 +7,8 @@
 #define BRAVE_COMPONENTS_BRAVE_SHIELDS_CORE_COMMON_BRAVE_SHIELD_UTILS_H_
 
 #include <map>
-#include <optional>
 
+#include "base/types/optional_ref.h"
 #include "brave/components/brave_shields/core/common/shields_settings.mojom-data-view.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "url/origin.h"
@@ -48,7 +48,7 @@ mojom::ContentSettingSource ConvertSettingsSource(
 // use the request initiator when there is one.
 url::Origin GetFirstPartyOriginForShields(
     const GURL& request_url,
-    const std::optional<url::Origin>& request_initiator,
+    base::optional_ref<const url::Origin> request_initiator,
     bool is_main_frame);
 
 }  // namespace brave_shields

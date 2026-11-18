@@ -132,7 +132,7 @@ mojom::ContentSettingSource ConvertSettingsSource(
 
 url::Origin GetFirstPartyOriginForShields(
     const GURL& request_url,
-    const std::optional<url::Origin>& request_initiator,
+    base::optional_ref<const url::Origin> request_initiator,
     bool is_main_frame) {
   url::Origin request_origin = url::Origin::Create(request_url);
   const bool use_initiator_origin =
