@@ -95,6 +95,16 @@ commit host belonging to that navigation or at commit; never install it on a
 host that still serves the previous document. Discard uncommitted navigation
 state on cancellation.
 
+## History and session restore
+
+For every committed navigation, the restored document must use the same Shields
+settings key it had before, whether restored by Back/Forward or by session
+restore after browser shutdown. When the key is a site origin, persist that
+origin in the navigation entry's session data. When the document used profile
+defaults, store no site origin and continue to use defaults on restore. The
+key must be available by the first Shields lookup for the restored document;
+look up the current preferences rather than restoring an old filtering decision.
+
 ## Worker requests
 
 Dedicated, shared, and service worker requests must retain the top-level
@@ -176,6 +186,10 @@ successful unfiltered control so a failed request alone cannot pass the test.
   A blocked. It must follow A in both cases, with defaults set oppositely.
 - **History:** Verify destruction of the original document, navigate the opener
   elsewhere, and observe filtering after Back restores the same entry.
+- **Session restore:** Close the opener of an inherited `about:blank` popup,
+  shut down the browser, and restore the session. Verify that a request from
+  the restored popup follows the original site's current settings. Repeat for
+  a popup that inherited profile defaults.
 - **Unit tests:** Keep input/output tests for selection and precedence, including
   missing or opaque isolation origins. Use browser tests when the claim is that
   Chromium generates a particular request or delivers a callback at a particular
